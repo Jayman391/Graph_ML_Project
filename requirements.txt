@@ -1,0 +1,8 @@
+numpy
+pandas
+matplotlib
+seaborn
+umap
+hdbscan
+os
+scikit-learn
