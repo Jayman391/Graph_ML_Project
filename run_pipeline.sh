@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=bluemoon
-#SBATCH --nodes=1
+#SBATCH --nodes=4
 #SBATCH --ntasks=4
 #SBATCH --time=10:00:00
 #SBATCH --mem=128G
