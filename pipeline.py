@@ -114,12 +114,13 @@ def grid_search(data, param_grid):
     data_reduced = apply_dimensionality_reduction(data, params['n_features'], params['dim_reduction_method'])
     # apply clustering
     labels = apply_unsupervised_clustering(data_reduced, params['n_clusters'], params['clustering_method'])
-    # plot labeled clusters
-    plot_clusters(data_reduced, labels, params['dim_reduction_method'], params['clustering_method'], params['n_features'], params['n_clusters'])
     # evaluate clustering
     silhouette, db, ch = evaluate_unsupervised_labels(data_reduced, labels)
     # update best score
     score = composite_score(silhouette, db, ch)
+    scores = [silhouette, db, ch]
+     # plot labeled clusters
+    plot_clusters(data_reduced, labels, params['dim_reduction_method'], params['clustering_method'], params['n_features'], params['n_clusters'], scores)
 
     if score > best_score:
       best_score = score
@@ -130,21 +131,25 @@ def grid_search(data, param_grid):
   return best_score, best_params, best_labels
 
 
-def plot_clusters(data, labels, dim_red_technique, clustering_technique, n_features, n_clusters):
+def plot_clusters(data, labels, dim_red_technique, clustering_technique, n_features, n_clusters, scores):
     # Convert the input data and labels into a pandas DataFrame
     df = pd.DataFrame(data)
     
     # Add the cluster labels as a new column in the DataFrame
     df['Cluster'] = labels
+
+    
     
     # Create a pair plot with colors representing clusters
     pair_plot = sns.pairplot(df, hue='Cluster', palette='viridis')
     
+    plt.title(f"{dim_red_technique} with {clustering_technique} on {n_features} features and {n_clusters} clusters")
+    plt.suptitle(f"Silhouette: {scores[0]:.2f}, Davies-Bouldin: {scores[1]:.2f}, Calinski-Harabasz: {scores[2]:.2f}")
     # Show the plot
     plt.show()
     
     # Save the plot to a PNG file
-    filename = f"output/{dim_red_technique}_{clustering_technique}_{n_features}features_{n_clusters}clusters.png"
+    filename = f"graphs/{dim_red_technique}_{clustering_technique}_{n_features}features_{n_clusters}clusters.png"
     pair_plot.savefig(filename)
     print(f"Plot saved as {filename}")
 
@@ -152,21 +157,12 @@ if __name__ == '__main__':
 
   data = preprocess_data()
 
-  '''param_grid = {
+  param_grid = {
         'n_features': list(range(2,11)),
         'dim_reduction_method': ['pca', 'umap'],
         'n_clusters': list(range(2,11)),
         'clustering_method': ['kmeans', 'hdbscan']
     }
-  '''
-
-  param_grid = {
-        'n_features': [2],
-        'dim_reduction_method': ['pca'],
-        'n_clusters': [2],
-        'clustering_method': ['kmeans']
-    }
-
 
   if not os.path.exists('output'):
     os.makedirs('output')
