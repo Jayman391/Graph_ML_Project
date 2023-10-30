@@ -125,6 +125,7 @@ def plot_clusters(
     print("\nFeature Statistics:")
     print(df.describe(include=[np.number]))
 
+
     # Output statistics about clusters
     print("\nCluster Counts:")
     print(pd.Series(labels).value_counts())
