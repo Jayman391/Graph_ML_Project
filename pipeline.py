@@ -10,6 +10,7 @@ import hdbscan
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import argparse
 
 
 # load in features and preprocess data
@@ -103,72 +104,65 @@ def composite_score(silhouette, db, ch):
   return (1-db) * silhouette * ch
 
 
-def grid_search(data, param_grid):
-
-  best_score = -np.inf
-  best_params = None
-  best_labels = None
-
-  for params in ParameterGrid(param_grid):
-    # apply dimensionality reduction
-    data_reduced = apply_dimensionality_reduction(data, params['n_features'], params['dim_reduction_method'])
-    # apply clustering
-    labels = apply_unsupervised_clustering(data_reduced, params['n_clusters'], params['clustering_method'])
-    # evaluate clustering
-    silhouette, db, ch = evaluate_unsupervised_labels(data_reduced, labels)
-    # update best score
-    score = composite_score(silhouette, db, ch)
-    scores = [silhouette, db, ch]
-     # plot labeled clusters
-    plot_clusters(data_reduced, labels, params['dim_reduction_method'], params['clustering_method'], params['n_features'], params['n_clusters'], scores)
-
-    if score > best_score:
-      best_score = score
-      best_params = params
-      best_labels = labels
-  
-
-  return best_score, best_params, best_labels
-
-
-def plot_clusters(data, labels, dim_red_technique, clustering_technique, n_features, n_clusters, scores):
-    # Convert the input data and labels into a pandas DataFrame
-    df = pd.DataFrame(data)
-    
-    # Add the cluster labels as a new column in the DataFrame
+def plot_clusters(data_reduced, labels, dim_reduction_method, clustering_method, n_features, n_clusters, scores):
+    # Convert the data to a DataFrame
+    df = pd.DataFrame(data_reduced, columns=[f'Feature_{i}' for i in range(1, n_features+1)])
     df['Cluster'] = labels
+    
+    # Output statistics about features
+    print("\nFeature Statistics:")
+    print(df.describe(include=[np.number]))
+    
+    # Output statistics about clusters
+    print("\nCluster Counts:")
+    print(df['Cluster'].value_counts())
+    
+    # Create pairplot colored by cluster
+    pairplot = sns.pairplot(df, hue='Cluster', palette='Set2')
+    plt.title(f'Pairplot of Features Colored by Cluster (Dim Reduction: {dim_reduction_method}, Clustering: {clustering_method}, n_features: {n_features}, n_clusters: {n_clusters})', y=1.02)
+    plt.suptitle(f'Silhouette Score: {scores[0]}, Davies-Bouldin Score: {scores[1]}, Calinski-Harabasz Score: {scores[2]}', y=0.95)
 
-    
-    
-    # Create a pair plot with colors representing clusters
-    pair_plot = sns.pairplot(df, hue='Cluster', palette='viridis')
-    
-    plt.title(f"{dim_red_technique} with {clustering_technique} on {n_features} features and {n_clusters} clusters")
-    plt.suptitle(f"Silhouette: {scores[0]:.2f}, Davies-Bouldin: {scores[1]:.2f}, Calinski-Harabasz: {scores[2]:.2f}")
     # Show the plot
     plt.show()
+
+    # Save the plot
+    pairplot.savefig(f'output/pairplot_{dim_reduction_method}_{clustering_method}_{n_features}features_{n_clusters}clusters.png')
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Run unsupervised learning on baby names dataset.')
+    parser.add_argument('--n_features', type=int, required=True, help='Number of features for dimensionality reduction')
+    parser.add_argument('--dim_reduction_method', type=str, required=True, choices=['pca', 'umap'], help='Dimensionality reduction method')
+    parser.add_argument('--n_clusters', type=int, required=True, help='Number of clusters for clustering algorithm')
+    parser.add_argument('--clustering_method', type=str, required=True, choices=['kmeans', 'hdbscan'], help='Clustering algorithm')
+    return parser.parse_args()
+
+def run_analysis(data, params):
+    # Apply dimensionality reduction
+    data_reduced = apply_dimensionality_reduction(data, params['n_features'], params['dim_reduction_method'])
     
-    # Save the plot to a PNG file
-    filename = f"graphs/{dim_red_technique}_{clustering_technique}_{n_features}features_{n_clusters}clusters.png"
-    pair_plot.savefig(filename)
-    print(f"Plot saved as {filename}")
+    # Print statistics about the reduced features
+    print(f'Mean of reduced features: {np.mean(data_reduced, axis=0)}')
+    print(f'Standard deviation of reduced features: {np.std(data_reduced, axis=0)}')
+    
+    # Apply clustering
+    labels = apply_unsupervised_clustering(data_reduced, params['n_clusters'], params['clustering_method'])
+    
+    # Evaluate clustering
+    silhouette, db, ch = evaluate_unsupervised_labels(data_reduced, labels)
+    scores = [silhouette, db, ch]
+    print(f'Silhouette Score: {silhouette}')
+    print(f'Davies-Bouldin Score: {db}')
+    print(f'Calinski-Harabasz Score: {ch}')
+    
+    # Plot labeled clusters
+    plot_clusters(data_reduced, labels, params['dim_reduction_method'], params['clustering_method'], params['n_features'], params['n_clusters'], scores)
+
 
 if __name__ == '__main__':
 
   data = preprocess_data()
 
-  param_grid = {
-        'n_features': list(range(2,11)),
-        'dim_reduction_method': ['pca', 'umap'],
-        'n_clusters': list(range(2,11)),
-        'clustering_method': ['kmeans', 'hdbscan']
-    }
+  params = parse_arguments()
 
-  if not os.path.exists('output'):
-    os.makedirs('output')
+  run_analysis(data, params)
 
-  best_score, best_params, best_labels = grid_search(data, param_grid)
-
-  print(f'Best score: {best_score}')
-  print(f'Best params: {best_params}')
-  print(f'Best labels: {best_labels}')

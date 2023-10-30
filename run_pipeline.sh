@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --partition=bluemoon
-#SBATCH --nodes=4
+#SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --time=10:00:00
 #SBATCH --mem=128G
@@ -8,4 +8,4 @@
 #SBATCH --output=output/%x_%j.out
 #SBATCH --mail-type=FAIL
 
-python pipeline.py
+python pipeline.py "$@"
