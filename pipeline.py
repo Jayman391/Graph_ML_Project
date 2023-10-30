@@ -138,15 +138,13 @@ def parse_arguments():
 
 def run_analysis(data, params):
     # Apply dimensionality reduction
-    data_reduced = apply_dimensionality_reduction(data, params['n_features'], params['dim_reduction_method'])
-    
+    data_reduced = apply_dimensionality_reduction(data, params.n_features, params.dim_reduction_method)    
     # Print statistics about the reduced features
     print(f'Mean of reduced features: {np.mean(data_reduced, axis=0)}')
     print(f'Standard deviation of reduced features: {np.std(data_reduced, axis=0)}')
     
     # Apply clustering
-    labels = apply_unsupervised_clustering(data_reduced, params['n_clusters'], params['clustering_method'])
-    
+    labels = apply_unsupervised_clustering(data_reduced, params.n_clusters, params.clustering_method)    
     # Evaluate clustering
     silhouette, db, ch = evaluate_unsupervised_labels(data_reduced, labels)
     scores = [silhouette, db, ch]
