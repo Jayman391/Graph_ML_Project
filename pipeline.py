@@ -194,6 +194,6 @@ def run_analysis(data, params):
 if __name__ == "__main__":
     data = preprocess_data()
 
-    #params = parse_arguments()
+    params = parse_arguments()
 
-    #run_analysis(data, params)
+    run_analysis(data, params)
