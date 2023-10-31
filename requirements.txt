@@ -4,5 +4,10 @@ matplotlib
 seaborn
 umap
 hdbscan
-os
 scikit-learn
+umap-learn
+llvmlite
+pynndescent==0.5.8
+torch
+torchvision
+sentence-transformers

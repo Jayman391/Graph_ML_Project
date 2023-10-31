@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import argparse
-
+from sentence_transformers import SentenceTransformer
 
 # load in features and preprocess data
 
@@ -42,11 +42,39 @@ def preprocess_data():
 
     print("user data successfully loaded")
 
+    posts = pd.read_json("babynamesDB_posts.json")
+
+    posts = posts[["author", "text"]]
+
+    temp = posts.groupby('author')['text'].apply(list)
+
+    #add posts to users by post author and user username
+    users = users.join(temp, on='_id')
+
+    # replace NaN with empty list
+    users['text'] = users['text'].fillna('')
+
+    print('posts successfully added to users')
+
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    # encode posts
+
+    users['text'] = users['text'].apply(lambda x: model.encode(x))
+
+    print('posts successfully encoded')
+    # explode embedded posts and join back to users
+    users = users.explode('text')
+
+    users = users.groupby("_id").sum()
+
     # scale data
     scaler = StandardScaler()
     users_scaled = scaler.fit_transform(users)
 
     print("data successfully scaled")
+
+    print(f'users embeding shape: {users.shape}')
 
     return users_scaled
 
@@ -166,6 +194,6 @@ def run_analysis(data, params):
 if __name__ == "__main__":
     data = preprocess_data()
 
-    params = parse_arguments()
+    #params = parse_arguments()
 
-    run_analysis(data, params)
+    #run_analysis(data, params)
