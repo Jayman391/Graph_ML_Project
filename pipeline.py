@@ -107,46 +107,6 @@ def composite_score(silhouette, db, ch):
     return (1 - db) * silhouette * ch
 
 
-def plot_clusters(
-    data_reduced,
-    labels,
-    dim_reduction_method,
-    clustering_method,
-    n_features,
-    n_clusters,
-    scores,
-):
-    # Convert the data to a DataFrame
-    df = pd.DataFrame(
-        data_reduced, columns=[f"Feature_{i}" for i in range(1, n_features + 1)]
-    )
-
-    # Output statistics about features
-    print("\nFeature Statistics:")
-    print(df.describe(include=[np.number]))
-
-
-    # Output statistics about clusters
-    print("\nCluster Counts:")
-    print(pd.Series(labels).value_counts())
-
-    # Create pairplot colored by cluster
-    pairplot = sns.pairplot(df, hue=pd.Series(labels, name="Cluster"), palette="Set2")
-    plt.title(
-        f"Pairplot of Features Colored by Cluster (Dim Reduction: {dim_reduction_method}, Clustering: {clustering_method}, n_features: {n_features}, n_clusters: {n_clusters})",
-        y=1.02,
-    )
-    plt.suptitle(
-        f"Silhouette Score: {scores[0]}, Davies-Bouldin Score: {scores[1]}, Calinski-Harabasz Score: {scores[2]}, Composite Score: {composite_score(scores[0], scores[1], scores[2])}",
-        y=0.95,
-    )
-
-
-    # Save the plot
-    pairplot.savefig(
-        f"output/pairplot_{dim_reduction_method}_{clustering_method}_{n_features}features_{n_clusters}clusters.png"
-    )
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -193,16 +153,14 @@ def run_analysis(data, params):
     print(f"Davies-Bouldin Score: {db}")
     print(f"Calinski-Harabasz Score: {ch}")
 
-    # Plot labeled clusters
-    plot_clusters(
-        data_reduced,
-        labels,
-        params.dim_reduction_method,
-        params.clustering_method,
-        params.n_features,
-        params.n_clusters,
-        scores,
-    )
+    # write everything to a csv
+    df = pd.DataFrame(data_reduced)
+    df["labels"] = labels
+    df["silhouette"] = silhouette
+    df["db"] = db
+    df["ch"] = ch
+    df["composite_score"] = composite_score(silhouette, db, ch)
+    df.to_csv(f'data/{params.n_features}_{params.dim_reduction_method}_{params.n_clusters}_{params.clustering_method}.csv')
 
 
 if __name__ == "__main__":
