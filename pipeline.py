@@ -15,68 +15,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import argparse
-from sentence_transformers import SentenceTransformer
 
 # load in features and preprocess data
 
 
-def preprocess_data():
-    # load in data
-    groups = pd.read_json("babynamesDB_groups.json")
-    # filter out groups with less than 3 users
-    groups = groups[groups["num_users_stored"] > 3]
-    group_ids = groups["_id"].to_list()
-
-    print("group data successfully loaded")
-
-    users = pd.read_json("babynamesDB_users.json")
-    users = users[["_id", "num_comments_stored", "groups", "num_posts_stored"]]
-    # unnest groups
-    users = users.explode("groups")
-    users = users[users["groups"].isin(group_ids)]
-    # 1 hot encode groups
-    users = pd.concat([users, pd.get_dummies(users["groups"], dtype=float)], axis=1)
-    # join data on user id
-    users = users.groupby("_id").sum()
-    # users = users.drop(columns=['groups'])
-
-    print("user data successfully loaded")
-
-    posts = pd.read_json("babynamesDB_posts.json")
-
-    posts = posts[["author", "text"]]
-
-    temp = posts.groupby('author')['text'].apply(list)
-
-    #add posts to users by post author and user username
-    users = users.join(temp, on='_id')
-
-    # replace NaN with empty list
-    users['text'] = users['text'].fillna('')
-
-    print('posts successfully added to users')
-
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-
-    # encode posts
-
-    users['text'] = users['text'].apply(lambda x: model.encode(x))
-
-    print('posts successfully encoded')
-    # explode embedded posts and join back to users
-    users = users.explode('text')
-
-    users = users.groupby("_id").sum()
-
-    # scale data
-    scaler = StandardScaler()
-    users_scaled = scaler.fit_transform(users)
-
-    print("data successfully scaled")
-
-    print(f'users embeding shape: {users.shape}')
-
-    return users_scaled
 
 
 def apply_dimensionality_reduction(data, n_components, method):
@@ -192,7 +134,7 @@ def run_analysis(data, params):
 
 
 if __name__ == "__main__":
-    data = preprocess_data()
+    data =pd.read_csv("data/users_embeddings.csv")
 
     params = parse_arguments()
 
