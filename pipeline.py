@@ -6,7 +6,6 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import (
     silhouette_score,
     davies_bouldin_score,
-    calinski_harabasz_score,
 )
 from sklearn.model_selection import ParameterGrid
 import umap
@@ -44,7 +43,7 @@ def apply_unsupervised_clustering(data, n_clusters, method):
     if method == "KMEANS":
         model = KMeans(n_clusters=n_clusters)
     elif method == "HDBSCAN":
-        model = hdbscan.HDBSCAN(min_cluster_size=n_clusters)
+        model = hdbscan.HDBSCAN(min_cluster_size=len(data)//(n_clusters * 2))
     else:
         raise ValueError("Invalid clustering method")
 
@@ -61,20 +60,8 @@ def evaluate_unsupervised_labels(data, labels):
     # calculate davies bouldin score
     db = davies_bouldin_score(data, labels)
     # calculate calinski harabasz score
-    ch = calinski_harabasz_score(data, labels)
 
-    return silhouette, db, ch
-
-
-def composite_score(silhouette, db, ch):
-    """
-    the closer the davies bouldin score is to 0 the better
-    the support of the silhouette score is between -1 and 1
-    the higher the calinski harabasz score the better
-
-    This composition turns the score into a maximization problem
-    """
-    return (1 - db) * silhouette * ch
+    return silhouette, db
 
 
 
@@ -117,24 +104,21 @@ def run_analysis(data, params):
         data_reduced, params.n_clusters, params.clustering_method
     )
     # Evaluate clustering
-    silhouette, db, ch = evaluate_unsupervised_labels(data_reduced, labels)
-    scores = [silhouette, db, ch]
+    silhouette, db= evaluate_unsupervised_labels(data_reduced, labels)
+    scores = [silhouette, db]
     print(f"Silhouette Score: {silhouette}")
     print(f"Davies-Bouldin Score: {db}")
-    print(f"Calinski-Harabasz Score: {ch}")
 
     # write everything to a csv
     df = pd.DataFrame(data_reduced)
     df["labels"] = labels
     df["silhouette"] = silhouette
     df["db"] = db
-    df["ch"] = ch
-    df["composite_score"] = composite_score(silhouette, db, ch)
     df.to_csv(f'data/{params.n_features}_{params.dim_reduction_method}_{params.n_clusters}_{params.clustering_method}.csv')
 
 
 if __name__ == "__main__":
-    data =pd.read_csv("data/users_embeddings.csv")
+    data = pd.read_csv("data/users_embeddings.csv")
 
     params = parse_arguments()
 

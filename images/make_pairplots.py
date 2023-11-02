@@ -37,9 +37,16 @@ clust_alg = params.clustering_method
 
 df = pd.read_csv(f'data/{i}_{dim_red}_{j}_{clust_alg}.csv')
 df.rename(columns={'Unnamed: 0':'id'}, inplace=True)
-df_features = df.drop(['id', 'silhouette', 'db', 'ch', 'composite_score'], axis=1)
-plt.figure()
-sns.pairplot(df_features, corner=True, hue='labels')
-plt.title(f'Pairplot of Features for {i} dimensions {dim_red} {j} clusters {clust_alg}')
-plt.savefig(f'images/{i}_{dim_red}_{j}_{clust_alg}_pairplot.png')
-plt.close()
+if clust_alg == 'kmeans':
+    df_features = df.drop(['id', 'silhouette', 'db', 'ch', 'composite_score'], axis=1)
+    plt.figure(figsize=(20,20))
+    g = sns.pairplot(df_features, hue='labels', palette='bright', corner=True, diag_kind='hist')
+    plt.savefig(f'images/{i}_{dim_red}_{j}_{clust_alg}_pairplot.png')
+    plt.close()
+
+if clust_alg == 'hdbscan':
+    df_features = df.drop(['id', 'silhouette', 'db', 'ch', 'composite_score', 'labels'], axis=1)
+    plt.figure(figsize=(20,20))
+    g = sns.pairplot(df_features, palette='bright', corner=True, diag_kind='hist')
+    plt.savefig(f'images/{i}_{dim_red}_{j}_{clust_alg}_pairplot.png')
+    plt.close()
