@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=bluemoon
+#SBATCH --partition=dggpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=4
 #SBATCH --time=10:00:00

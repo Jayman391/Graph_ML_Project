@@ -120,6 +120,8 @@ def run_analysis(data, params):
 if __name__ == "__main__":
     data = pd.read_csv("data/users_embeddings.csv")
 
+    data.drop(columns=["_id"], inplace=True)
+
     params = parse_arguments()
 
     run_analysis(data, params)
