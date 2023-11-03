@@ -43,7 +43,7 @@ def apply_unsupervised_clustering(data, n_clusters, method):
     if method == "KMEANS":
         model = KMeans(n_clusters=n_clusters)
     elif method == "HDBSCAN":
-        model = hdbscan.HDBSCAN(min_cluster_size=len(data)//(n_clusters * 2))
+        model = hdbscan.HDBSCAN(min_cluster_size=n_clusters * 100)
     else:
         raise ValueError("Invalid clustering method")
 
@@ -121,6 +121,9 @@ if __name__ == "__main__":
     data = pd.read_csv("data/users_embeddings.csv")
 
     data.drop(columns=["_id"], inplace=True)
+
+    scaler = StandardScaler()
+    data = scaler.fit_transform(data)
 
     params = parse_arguments()
 

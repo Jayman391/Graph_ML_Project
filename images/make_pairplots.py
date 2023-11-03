@@ -48,8 +48,8 @@ if clust_alg == 'kmeans':
     plt.close()
 
 if clust_alg == 'hdbscan':
-    df_features = df.drop(['id', 'silhouette', 'db', 'labels'], axis=1)
+    df_features = df.drop(['id', 'silhouette', 'db',], axis=1)
     plt.figure(figsize=(20,20))
-    g = sns.pairplot(df_features, palette='bright', corner=True, diag_kind='hist')
+    g = sns.pairplot(df_features, hue='labels',  palette='bright', corner=True, diag_kind='kde')
     plt.savefig(f'images/{i}_{dim_red}_{j}_{clust_alg}_pairplot.png')
     plt.close()
