@@ -36,5 +36,17 @@ users.fillna(0, inplace=True)
 
 print("post embeddings successfully loaded")
 
+comments = pd.read_csv("data/encoded_comments.csv")
+
+# group by author and aggregate embeddings
+comments = comments.groupby("author").mean()
+
+# add empty embeddings for users with no posts in the posts df
+users = pd.merge(users, comments, left_on='_id', right_index=True, how='left')
+
+users.fillna(0, inplace=True)
+
+print("comment embeddings successfully loaded")
+
 # write out data
-users.to_csv("data/users_embeddings.csv")
+users.to_csv("data/full_users_embeddings.csv")

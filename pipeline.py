@@ -43,7 +43,7 @@ def apply_unsupervised_clustering(data, n_clusters, method):
     if method == "KMEANS":
         model = KMeans(n_clusters=n_clusters)
     elif method == "HDBSCAN":
-        model = hdbscan.HDBSCAN(min_cluster_size=n_clusters * 100)
+        model = hdbscan.HDBSCAN(min_cluster_size=n_clusters)
     else:
         raise ValueError("Invalid clustering method")
 

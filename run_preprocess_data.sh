@@ -8,4 +8,4 @@
 #SBATCH --output=output/%x_%j.out
 #SBATCH --mail-type=FAIL
 
-python preprocess_data.py
+python preprocess_comments.py

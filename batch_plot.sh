@@ -1,7 +1,7 @@
 #!/bin/bash
 
-reduction_methods="pca umap"
-clustering_methods="kmeans hdbscan"
+reduction_methods="umap"
+clustering_methods="hdbscan"
 
 for feature_count in {3..5}; do
     for cluster_count in {3..10}; do
