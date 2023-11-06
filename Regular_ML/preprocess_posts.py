@@ -19,7 +19,7 @@ for author, texts_list in temp.iteritems():
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # Encode the texts
-encoded_text = model.encode(texts, show_progress_bar=True)
+encoded_text = model.encode(texts, show_progress_bar=False)
 
 # Combine authors and encoded texts into a DataFrame
 encoded_df = pd.DataFrame(encoded_text)
