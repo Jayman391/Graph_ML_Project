@@ -118,7 +118,7 @@ def run_analysis(data, params):
 
 
 if __name__ == "__main__":
-    data = pd.read_csv("data/users_embeddings.csv")
+    data = pd.read_csv("data/full_users_embeddings.csv")
 
     data.drop(columns=["_id"], inplace=True)
 
