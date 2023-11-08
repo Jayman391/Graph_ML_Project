@@ -50,6 +50,9 @@ from collections import Counter
 
 word_counts = Counter(words)
 
+# sort the words by their counts
+word_counts = {k: v for k, v in sorted(word_counts.items(), key=lambda item: item[1], reverse=True)}
+
 tokens = word_counts.keys()
 
 counts = word_counts.values()
@@ -74,6 +77,9 @@ for label in labels:
         for word in word_list:
             words.append(word)
     word_counts = Counter(words)
+
+    word_counts = {k: v for k, v in sorted(word_counts.items(), key=lambda item: item[1], reverse=True)}
+
     tokens = word_counts.keys()
     counts = word_counts.values()
     relative_frequencies = [word_counts[token]/len(words) for token in tokens]
