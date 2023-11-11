@@ -1,6 +1,8 @@
 babynamesDB_comments.json
 babynamesDB_posts.json
 babynamesDB_users.json
+Graph_ML/babynamesDB_users.json
+Graph_ML/full_users_embeddings.csv
 babynamesDB_groups.json
 data/
 images/
