@@ -1,3 +1,4 @@
 full_users_embeddings.csv
 babynamesDB_users.json
-graph.graphml
+graph.edgelist
+babynamesDB_groups.json

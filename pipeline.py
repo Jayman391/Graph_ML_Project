@@ -1,20 +1,44 @@
 import pandas as pd
 import numpy as np
 import networkx as nx
-import xgi
 import matplotlib.pyplot as plt
 import seaborn as sns
-import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.utils.convert import from_networkx
 from torch_geometric.nn import GCNConv
 from torch_geometric.utils import train_test_split_edges
+from scipy import sparse
 
+groups = pd.read_json("babynamesDB_groups.json")
+groups = groups.query("num_users_stored > 3")
+group_ids = groups["_id"].to_list()
 
-G = nx.read_graphml('graph.graphml')
+# Efficiently handle embeddings
+embeddings = pd.read_csv('data/full_users_embeddings.csv')
+# keep only the last 768 columns
+embeddings = embeddings.iloc[:, -768:]
+print('embeddings shape: ', embeddings.shape)
+# Using sparse matrix for embeddings
+sparse_embeddings = sparse.lil_matrix((len(embeddings) + len(group_ids), embeddings.shape[1] + len(group_ids)))
+print('sparse embeddings shape: ', sparse_embeddings.shape)
+# Populate the matrix
+sparse_embeddings[:len(embeddings), :embeddings.shape[1]] = embeddings.values
 
+# One-hot encoding for groups
+group_one_hot = sparse.eye(len(group_ids))
+sparse_embeddings[len(embeddings):, -len(group_ids):] = group_one_hot
+print(group_one_hot.shape)
+
+embeddings = pd.DataFrame(sparse_embeddings.todense(), columns=embeddings.columns.to_list() + group_ids)
+G = nx.read_edgelist('graph.edgelist')
+
+attrs = {}
+for node in G.nodes():
+    attrs[node] = embeddings.iloc[node].to_dict()
+
+nx.set_node_attributes(G, attrs)    
 print('node attributes set')
 
 pyg_graph = from_networkx(G)
@@ -22,6 +46,7 @@ pyg_graph = from_networkx(G)
 
 print('graph converted to pytorch geometric graph')
 
+torch.save(pyg_graph, 'pyg_graph.pt')
 data = train_test_split_edges(pyg_graph)
 
 class GCN(torch.nn.Module):
@@ -81,7 +106,7 @@ def test(model, data):
 
 input_dim = embeddings.shape[1] - 4  # Minus 4 to exclude '_id', 'one_hot', and two additional columns
 hidden_dim = 64  # Example value, you may need to tune this
-num_groups = hyperedge_list['groups'].nunique()  # Assuming this is the number of groups
+num_groups = len(group_ids)  # Assuming this is the number of groups
 num_layers = 2   # Number of layers in GCN
 dropout = 0.5    # Dropout rate
 
