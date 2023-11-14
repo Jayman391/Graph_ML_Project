@@ -11,51 +11,14 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.utils import train_test_split_edges
 from scipy import sparse
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+embeddings = pd.read_csv('data/full_users_embeddings_2.csv')
 
 groups = pd.read_json("babynamesDB_groups.json")
 groups = groups.query("num_users_stored > 3")
 group_ids = groups["_id"].to_list()
 
-# Efficiently handle embeddings
-embeddings = pd.read_csv('data/full_users_embeddings.csv')
-# keep only the last 768 columns
-embeddings = embeddings.iloc[:, -768:]
-print('embeddings shape: ', embeddings.shape)
-# Using sparse matrix for embeddings
-sparse_embeddings = sparse.lil_matrix((len(embeddings) + len(group_ids), embeddings.shape[1] + len(group_ids)))
-print('sparse embeddings shape: ', sparse_embeddings.shape)
-# Populate the matrix
-sparse_embeddings[:len(embeddings), :embeddings.shape[1]] = embeddings.values
+pyg_graph = torch.read('pyg_graph.pt')
 
-# One-hot encoding for groups
-group_one_hot = sparse.eye(len(group_ids))
-sparse_embeddings[len(embeddings):, -len(group_ids):] = group_one_hot
-print(group_one_hot.shape)
-
-embeddings = pd.DataFrame(sparse_embeddings.todense(), columns=embeddings.columns.to_list() + group_ids)
-# set column names to range of integers
-embeddings.rename(columns={col: i for i, col in enumerate(embeddings.columns)}, inplace=True)
-G = nx.read_edgelist('graph.edgelist')
-
-attrs = {}
-for node in G.nodes():
-    data = embeddings.iloc[int(node)].to_dict()
-    # if there are fields in embeddings but not in data,add and fill them with 0
-    for field in embeddings.columns.to_list():
-        if field not in data:
-            data[field] = 0
-    attrs[int(node)] = data 
-
-nx.set_node_attributes(G, attrs)    
-print('node attributes set')
-
-pyg_graph = from_networkx(G)
-
-
-print('graph converted to pytorch geometric graph')
-
-torch.save(pyg_graph, 'pyg_graph.pt')
 data = train_test_split_edges(pyg_graph)
 
 class GCN(torch.nn.Module):
@@ -113,7 +76,7 @@ def test(model, data):
     # Here you can calculate the evaluation metrics like AUC, Accuracy, etc.
     return pos_link_probs, neg_link_probs
 
-input_dim = embeddings.shape[1] - 4  # Minus 4 to exclude '_id', 'one_hot', and two additional columns
+input_dim = embeddings.shape[1] # Minus 4 to exclude '_id', 'one_hot', and two additional columns
 hidden_dim = 64  # Example value, you may need to tune this
 num_groups = len(group_ids)  # Assuming this is the number of groups
 num_layers = 2   # Number of layers in GCN
