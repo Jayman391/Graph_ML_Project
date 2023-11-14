@@ -1,43 +1,34 @@
 import pandas as pd
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
-import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.utils.convert import from_networkx
 from torch_geometric.nn import GCNConv
-from torch_geometric.utils import train_test_split_edges
-from scipy import sparse
+from torch_geometric.transforms import RandomLinkSplit
+from torch_geometric.utils import negative_sampling
+from sklearn.metrics import roc_auc_score, precision_recall_fscore_support, confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-embeddings = pd.read_csv('data/full_users_embeddings_2.csv')
-
-groups = pd.read_json("babynamesDB_groups.json")
-groups = groups.query("num_users_stored > 3")
-group_ids = groups["_id"].to_list()
-
-pyg_graph = torch.read('pyg_graph.pt')
-
-data = train_test_split_edges(pyg_graph)
-
+# Define the GCN Model
 class GCN(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, num_groups, num_layers, dropout):
         super(GCN, self).__init__()
-        
-        # Convolutional layers
+        # Initialize convolutional layers
         self.convs = torch.nn.ModuleList([GCNConv(input_dim, hidden_dim)])
         for _ in range(num_layers - 2):
             self.convs.append(GCNConv(hidden_dim, hidden_dim))
-        self.convs.append(GCNConv(hidden_dim, num_groups))  # Output layer for group prediction
+        # Output layer for group prediction
+        self.convs.append(GCNConv(hidden_dim, num_groups))  
 
-        # Batch normalization layers
+        # Initialize batch normalization layers
         self.bns = torch.nn.ModuleList()
         for _ in range(num_layers - 1):
             self.bns.append(torch.nn.BatchNorm1d(hidden_dim))
 
         self.dropout = dropout
 
+    # Encoding function to generate node embeddings
     def encode(self, x, edge_index):
         x_hat = x
         for i in range(len(self.convs)-1):
@@ -47,50 +38,102 @@ class GCN(torch.nn.Module):
             x_hat = F.dropout(x_hat, self.dropout, training=self.training)
         return self.convs[-1](x_hat, edge_index)
 
+    # Decoding function to compute edge scores
     def decode(self, z, edge_index):
         return (z[edge_index[0]] * z[edge_index[1]]).sum(dim=-1)
 
+    # Forward pass
     def forward(self, data):
         z = self.encode(data.x, data.train_pos_edge_index)
         link_logits = self.decode(z, data.train_pos_edge_index)
         return link_logits
 
+# Function to train the model
 def train(model, data, optimizer, loss_fn):
     model.train()
     optimizer.zero_grad()
+
+    # Positive samples from the graph
+    pos_edge_index = data.train_pos_edge_index
+
+    # Negative sampling for training
+    neg_edge_index = negative_sampling(
+        edge_index=data.train_pos_edge_index,
+        num_nodes=data.num_nodes,
+        num_neg_samples=pos_edge_index.size(1))
+
     link_logits = model(data)
-    link_labels = torch.cat([torch.ones(data.train_pos_edge_index.size(1)), 
-                             torch.zeros(data.train_neg_edge_index.size(1))], dim=0)
+    link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
+                             torch.zeros(neg_edge_index.size(1))], dim=0)
     loss = loss_fn(link_logits, link_labels)
     loss.backward()
     optimizer.step()
     return loss.item()
 
+# Function to evaluate the model
 @torch.no_grad()
-def test(model, data):
+def evaluate(model, data):
     model.eval()
-    pos_link_logits = model.encode(data.x, data.test_pos_edge_index)
-    neg_link_logits = model.encode(data.x, data.test_neg_edge_index)
-    pos_link_probs = F.softmax(pos_link_logits, dim=1)
-    neg_link_probs = F.softmax(neg_link_logits, dim=1)
-    # Here you can calculate the evaluation metrics like AUC, Accuracy, etc.
-    return pos_link_probs, neg_link_probs
 
-input_dim = embeddings.shape[1] # Minus 4 to exclude '_id', 'one_hot', and two additional columns
-hidden_dim = 64  # Example value, you may need to tune this
-num_groups = len(group_ids)  # Assuming this is the number of groups
-num_layers = 2   # Number of layers in GCN
-dropout = 0.5    # Dropout rate
+    # Positive and negative samples for testing
+    pos_edge_index = data.test_pos_edge_index
+    neg_edge_index = negative_sampling(
+        edge_index=data.test_pos_edge_index,
+        num_nodes=data.num_nodes,
+        num_neg_samples=pos_edge_index.size(1))
 
+    pos_link_logits = model.encode(data.x, pos_edge_index)
+    neg_link_logits = model.encode(data.x, neg_edge_index)
+    pos_probs = torch.sigmoid(pos_link_logits).cpu().numpy()
+    neg_probs = torch.sigmoid(neg_link_logits).cpu().numpy()
+
+    # Combine positive and negative predictions
+    probs = np.concatenate([pos_probs, neg_probs])
+    labels = np.concatenate([np.ones(pos_probs.shape[0]), np.zeros(neg_probs.shape[0])])
+    
+    # Calculate evaluation metrics
+    auc_roc = roc_auc_score(labels, probs)
+    preds = (probs > 0.5).astype(int)
+    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
+    conf_matrix = confusion_matrix(labels, preds)
+
+    return auc_roc, precision, recall, f1, conf_matrix
+
+# Load your graph and perform train/test split
+pyg_graph = torch.load('pyg_graph.pt')
+transform = RandomLinkSplit(is_undirected=True)
+train_data, val_data, test_data = transform(pyg_graph)
+
+# Load embeddings and set model parameters
+embeddings = pd.read_csv('data/full_users_embeddings_2.csv')
+input_dim = embeddings.shape[1]
+hidden_dim = 64
+groups = pd.read_json("babynamesDB_groups.json")
+groups = groups.query("num_users_stored > 3")
+group_ids = groups["_id"].to_list()
+num_groups = len(group_ids)
+num_layers = 2
+dropout = 0.5
+
+# Initialize the model
 model = GCN(input_dim, hidden_dim, num_groups, num_layers, dropout)
-
 loss_fn = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)  # Learning rate may need tuning
-num_epochs = 100  # Number of epochs to train
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
+# Training loop
+num_epochs = 100
 for epoch in range(num_epochs):
-    loss = train(model, data, optimizer, loss_fn)
+    loss = train(model, train_data, optimizer, loss_fn)
     if epoch % 10 == 0:
         print(f'Epoch {epoch}/{num_epochs}, Loss: {loss:.4f}')
 
-pos_link_probs, neg_link_probs = test(model, data)
+# Evaluate the model
+auc_roc, precision, recall, f1, conf_matrix = evaluate(model, test_data)
+print(f"AUC-ROC: {auc_roc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+
+# Visualize the confusion matrix
+sns.heatmap(conf_matrix, annot=True, fmt='d')
+plt.title('Confusion Matrix')
+plt.ylabel('Actual Label')
+plt.xlabel('Predicted Label')
+plt.show()
