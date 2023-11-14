@@ -11,6 +11,8 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.utils import train_test_split_edges
 from scipy import sparse
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 groups = pd.read_json("babynamesDB_groups.json")
 groups = groups.query("num_users_stored > 3")
 group_ids = groups["_id"].to_list()
@@ -32,11 +34,18 @@ sparse_embeddings[len(embeddings):, -len(group_ids):] = group_one_hot
 print(group_one_hot.shape)
 
 embeddings = pd.DataFrame(sparse_embeddings.todense(), columns=embeddings.columns.to_list() + group_ids)
+# set column names to range of integers
+embeddings.rename(columns={col: i for i, col in enumerate(embeddings.columns)}, inplace=True)
 G = nx.read_edgelist('graph.edgelist')
 
 attrs = {}
 for node in G.nodes():
-    attrs[node] = embeddings.iloc[node].to_dict()
+    data = embeddings.iloc[int(node)].to_dict()
+    # if there are fields in embeddings but not in data,add and fill them with 0
+    for field in embeddings.columns.to_list():
+        if field not in data:
+            data[field] = 0
+    attrs[int(node)] = data 
 
 nx.set_node_attributes(G, attrs)    
 print('node attributes set')
