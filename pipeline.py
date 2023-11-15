@@ -10,8 +10,22 @@ from sklearn.metrics import roc_auc_score, precision_recall_fscore_support, conf
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+
+# Load embeddings and set model parameters
+embeddings = pd.read_csv('data/full_users_embeddings_2.csv')
+input_dim = embeddings.shape[1]
+hidden_dim = 64
+groups = pd.read_json("babynamesDB_groups.json")
+groups = groups.query("num_users_stored > 3")
+group_ids = groups["_id"].to_list()
+num_groups = len(group_ids)
+num_layers = 2
+dropout = 0.5
+
 # Load your graph and perform train/test split
 pyg_graph = torch.load('pyg_graph.pt')
+pyg_graph.x = torch.tensor(embeddings.values, dtype=torch.float)
+
 transform = RandomLinkSplit(is_undirected=True)
 train_data, val_data, test_data = transform(pyg_graph)
 
@@ -65,7 +79,7 @@ def train(model, data, optimizer, loss_fn):
     neg_edge_index = negative_sampling(
         edge_index=train_data.edge_index,
         num_nodes=train_data.edge_index.shape[1],
-        num_neg_samples=pyg_graph.num_edges - train_data.num_edges
+        num_neg_samples=np.abs(pyg_graph.num_edges - train_data.num_edges)
         )
 
     link_logits = model(data)
@@ -86,7 +100,7 @@ def evaluate(model, data):
     neg_edge_index = negative_sampling(
         edge_index=test_data.edge_index,
         num_nodes=test_data.edge_index.shape[1],
-        num_neg_samples=pyg_graph.num_edges - test_data.num_edges
+        num_neg_samples=np.abs(pyg_graph.num_edges - test_data.num_edges)
         )
 
 
@@ -107,16 +121,6 @@ def evaluate(model, data):
 
     return auc_roc, precision, recall, f1, conf_matrix
 
-# Load embeddings and set model parameters
-embeddings = pd.read_csv('data/full_users_embeddings_2.csv')
-input_dim = embeddings.shape[1]
-hidden_dim = 64
-groups = pd.read_json("babynamesDB_groups.json")
-groups = groups.query("num_users_stored > 3")
-group_ids = groups["_id"].to_list()
-num_groups = len(group_ids)
-num_layers = 2
-dropout = 0.5
 
 # Initialize the model
 model = GCN(input_dim, hidden_dim, num_groups, num_layers, dropout)
