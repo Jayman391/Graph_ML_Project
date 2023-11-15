@@ -1,4 +1,5 @@
-full_users_embeddings.csv
+full_users_embeddings_2.csv
 babynamesDB_users.json
+pyg_graph.pt
 graph.edgelist
 babynamesDB_groups.json

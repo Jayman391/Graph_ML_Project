@@ -10,6 +10,11 @@ from sklearn.metrics import roc_auc_score, precision_recall_fscore_support, conf
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+# Load your graph and perform train/test split
+pyg_graph = torch.load('pyg_graph.pt')
+transform = RandomLinkSplit(is_undirected=True)
+train_data, val_data, test_data = transform(pyg_graph)
+
 # Define the GCN Model
 class GCN(torch.nn.Module):
     def __init__(self, input_dim, hidden_dim, num_groups, num_layers, dropout):
@@ -44,8 +49,8 @@ class GCN(torch.nn.Module):
 
     # Forward pass
     def forward(self, data):
-        z = self.encode(data.x, data.train_pos_edge_index)
-        link_logits = self.decode(z, data.train_pos_edge_index)
+        z = self.encode(data.x, data.edge_index)
+        link_logits = self.decode(z, data.edge_index)
         return link_logits
 
 # Function to train the model
@@ -54,13 +59,14 @@ def train(model, data, optimizer, loss_fn):
     optimizer.zero_grad()
 
     # Positive samples from the graph
-    pos_edge_index = data.train_pos_edge_index
+    pos_edge_index = train_data.edge_index
 
     # Negative sampling for training
     neg_edge_index = negative_sampling(
-        edge_index=data.train_pos_edge_index,
-        num_nodes=data.num_nodes,
-        num_neg_samples=pos_edge_index.size(1))
+        edge_index=train_data.edge_index,
+        num_nodes=train_data.edge_index.shape[1],
+        num_neg_samples=pyg_graph.num_edges - train_data.num_edges
+        )
 
     link_logits = model(data)
     link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
@@ -76,11 +82,13 @@ def evaluate(model, data):
     model.eval()
 
     # Positive and negative samples for testing
-    pos_edge_index = data.test_pos_edge_index
+    pos_edge_index = test_data.edge_index
     neg_edge_index = negative_sampling(
-        edge_index=data.test_pos_edge_index,
-        num_nodes=data.num_nodes,
-        num_neg_samples=pos_edge_index.size(1))
+        edge_index=test_data.edge_index,
+        num_nodes=test_data.edge_index.shape[1],
+        num_neg_samples=pyg_graph.num_edges - test_data.num_edges
+        )
+
 
     pos_link_logits = model.encode(data.x, pos_edge_index)
     neg_link_logits = model.encode(data.x, neg_edge_index)
@@ -98,11 +106,6 @@ def evaluate(model, data):
     conf_matrix = confusion_matrix(labels, preds)
 
     return auc_roc, precision, recall, f1, conf_matrix
-
-# Load your graph and perform train/test split
-pyg_graph = torch.load('pyg_graph.pt')
-transform = RandomLinkSplit(is_undirected=True)
-train_data, val_data, test_data = transform(pyg_graph)
 
 # Load embeddings and set model parameters
 embeddings = pd.read_csv('data/full_users_embeddings_2.csv')
