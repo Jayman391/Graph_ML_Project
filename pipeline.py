@@ -4,11 +4,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
+from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import RandomLinkSplit
 from torch_geometric.utils import negative_sampling
 from sklearn.metrics import roc_auc_score, precision_recall_fscore_support, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+# use cuda
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 # Load embeddings and set model parameters
@@ -24,10 +28,19 @@ dropout = 0.5
 
 # Load your graph and perform train/test split
 pyg_graph = torch.load('pyg_graph.pt')
+
+assert pyg_graph.num_nodes == embeddings.shape[0], "Mismatch in the number of nodes and embeddings rows"
+
 pyg_graph.x = torch.tensor(embeddings.values, dtype=torch.float)
 
 transform = RandomLinkSplit(is_undirected=True)
 train_data, val_data, test_data = transform(pyg_graph)
+
+
+train_loader = DataLoader(train_data, batch_size=32, shuffle=False)
+val_loader = DataLoader(val_data, batch_size=32, shuffle=False)
+test_loader = DataLoader(test_data, batch_size=32, shuffle=False)
+
 
 # Define the GCN Model
 class GCN(torch.nn.Module):
@@ -68,58 +81,58 @@ class GCN(torch.nn.Module):
         return link_logits
 
 # Function to train the model
-def train(model, data, optimizer, loss_fn):
+def train(model, loader, optimizer, loss_fn):
     model.train()
-    optimizer.zero_grad()
+    total_loss = 0
+    for batch in loader:
+        optimizer.zero_grad()
 
-    # Positive samples from the graph
-    pos_edge_index = train_data.edge_index
+        # Positive and Negative sampling for each batch
+        pos_edge_index = batch.edge_index
+        neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=batch.x.size(0))
 
-    # Negative sampling for training
-    neg_edge_index = negative_sampling(
-        edge_index=train_data.edge_index,
-        num_nodes=train_data.edge_index.shape[1],
-        num_neg_samples=np.abs(pyg_graph.num_edges - train_data.num_edges)
-        )
+        # Forward pass
+        link_logits = model(batch)
+        link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
+                                 torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
 
-    link_logits = model(data)
-    link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
-                             torch.zeros(neg_edge_index.size(1))], dim=0)
-    loss = loss_fn(link_logits, link_labels)
-    loss.backward()
-    optimizer.step()
-    return loss.item()
+        # Loss calculation
+        loss = loss_fn(link_logits, link_labels)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    return total_loss / len(loader)
 
 # Function to evaluate the model
 @torch.no_grad()
-def evaluate(model, data):
+def evaluate(model, loader):
     model.eval()
+    total_auc_roc, total_precision, total_recall, total_f1 = 0, 0, 0, 0
+    for batch in loader:
+        # Positive and Negative sampling for each batch
+        pos_edge_index = batch.edge_index
+        neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=batch.x.size(0))
 
-    # Positive and negative samples for testing
-    pos_edge_index = test_data.edge_index
-    neg_edge_index = negative_sampling(
-        edge_index=test_data.edge_index,
-        num_nodes=test_data.edge_index.shape[1],
-        num_neg_samples=np.abs(pyg_graph.num_edges - test_data.num_edges)
-        )
+        pos_link_logits = model.encode(batch.x, pos_edge_index)
+        neg_link_logits = model.encode(batch.x, neg_edge_index)
+        pos_probs = torch.sigmoid(pos_link_logits).numpy()
+        neg_probs = torch.sigmoid(neg_link_logits).numpy()
 
+        probs = np.concatenate([pos_probs, neg_probs])
+        labels = np.concatenate([np.ones(pos_probs.shape[0]), np.zeros(neg_probs.shape[0])])
 
-    pos_link_logits = model.encode(data.x, pos_edge_index)
-    neg_link_logits = model.encode(data.x, neg_edge_index)
-    pos_probs = torch.sigmoid(pos_link_logits).cpu().numpy()
-    neg_probs = torch.sigmoid(neg_link_logits).cpu().numpy()
-
-    # Combine positive and negative predictions
-    probs = np.concatenate([pos_probs, neg_probs])
-    labels = np.concatenate([np.ones(pos_probs.shape[0]), np.zeros(neg_probs.shape[0])])
+        auc_roc = roc_auc_score(labels, probs)
+        preds = (probs > 0.5).astype(int)
+        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
+        
+        total_auc_roc += auc_roc
+        total_precision += precision
+        total_recall += recall
+        total_f1 += f1
     
-    # Calculate evaluation metrics
-    auc_roc = roc_auc_score(labels, probs)
-    preds = (probs > 0.5).astype(int)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
-    conf_matrix = confusion_matrix(labels, preds)
+    num_batches = len(loader)
+    return total_auc_roc / num_batches, total_precision / num_batches, total_recall / num_batches, total_f1 / num_batches
 
-    return auc_roc, precision, recall, f1, conf_matrix
 
 
 # Initialize the model
@@ -127,20 +140,31 @@ model = GCN(input_dim, hidden_dim, num_groups, num_layers, dropout)
 loss_fn = torch.nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-# Training loop
 num_epochs = 100
+
+# train on GPU if available
+
+model = model.to(device)
+loss_fn = loss_fn.to(device)
+
+
+# Training loop with error handling
 for epoch in range(num_epochs):
-    loss = train(model, train_data, optimizer, loss_fn)
-    if epoch % 10 == 0:
-        print(f'Epoch {epoch}/{num_epochs}, Loss: {loss:.4f}')
+    try:
+        loss = train(model, train_loader, optimizer, loss_fn)
+        print(f'Epoch {epoch}: Loss: {loss:.4f}')
+    except KeyError as e:
+        print(f"KeyError encountered: {e}")
+        # Optional: Add debugging or logging statements here
+        break
 
 # Evaluate the model
-auc_roc, precision, recall, f1, conf_matrix = evaluate(model, test_data)
+auc_roc, precision, recall, f1 = evaluate(model, test_loader)
 print(f"AUC-ROC: {auc_roc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
 
-# Visualize the confusion matrix
-sns.heatmap(conf_matrix, annot=True, fmt='d')
-plt.title('Confusion Matrix')
-plt.ylabel('Actual Label')
-plt.xlabel('Predicted Label')
-plt.show()
+# Writing metrics to a file
+with open("evaluation_metrics.txt", "w") as file:
+    file.write(f"AUC-ROC: {auc_roc:.4f}\n")
+    file.write(f"Precision: {precision:.4f}\n")
+    file.write(f"Recall: {recall:.4f}\n")
+    file.write(f"F1-Score: {f1:.4f}\n")
