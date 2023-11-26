@@ -74,9 +74,11 @@ def train(model, data, optimizer, loss_fn):
     neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=data.x.size(0))
 
     link_logits = model(data.x, data.edge_index)
+    link_logits = torch.cat([link_logits, torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
+
     link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
                              torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
-
+    
     loss = loss_fn(link_logits, link_labels)
     loss.backward()
     optimizer.step()
