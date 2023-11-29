@@ -68,13 +68,15 @@ class GCN(torch.nn.Module):
 # Function to train the model
 def train(model, data, optimizer, loss_fn):
     model.train()
+    optimizer.zero_grad()
 
     pos_edge_index = data.edge_index
-    neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=data.x.size(0))
+    neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=data.num_nodes)
 
-    link_logits = model(data.x, data.edge_index)
-    link_logits = torch.cat([link_logits, torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
+    # Concatenate positive and negative edges
+    total_edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=1)
 
+    link_logits = model(data.x, total_edge_index)
     link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
                              torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
     
@@ -87,29 +89,23 @@ def train(model, data, optimizer, loss_fn):
 @torch.no_grad()
 def evaluate(model, data):
     model.eval()
-    total_auc_roc, total_precision, total_recall, total_f1 = 0, 0, 0, 0
-
     pos_edge_index = data.edge_index
-    neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=data.x.size(0))
+    neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=data.num_nodes)
 
-    pos_link_logits = model.encode(data.x, pos_edge_index)
-    neg_link_logits = model.encode(data.x, neg_edge_index)
-    pos_probs = torch.sigmoid(pos_link_logits).numpy()
-    neg_probs = torch.sigmoid(neg_link_logits).numpy()
+    total_edge_index = torch.cat([pos_edge_index, neg_edge_index], dim=1)
+    link_logits = model(data.x, total_edge_index)
 
-    probs = np.concatenate([pos_probs, neg_probs])
-    labels = np.concatenate([np.ones(pos_probs.shape[0]), np.zeros(neg_probs.shape[0])])
+    link_labels = torch.cat([torch.ones(pos_edge_index.size(1)), 
+                             torch.zeros(neg_edge_index.size(1))], dim=0).to(device)
 
+    probs = torch.sigmoid(link_logits).cpu().numpy()
     preds = (probs > 0.5).astype(int)
-    auc_roc = roc_auc_score(labels, preds, average='binary')
+    labels = link_labels.cpu().numpy()
+
+    auc_roc = roc_auc_score(labels, preds)
     precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
     
-    total_auc_roc += auc_roc
-    total_precision += precision
-    total_recall += recall
-    total_f1 += f1
-
-    return total_auc_roc, total_precision , total_recall , total_f1 
+    return auc_roc, precision, recall, f1
 
 
 input_dim = graph.x.shape[1]
@@ -150,15 +146,15 @@ print(loss)
 # Training loop with error handling
 for epoch in range(num_epochs):
     try:
-        optimizer.zero_grad()
-        loss = train(model, train_data, optimizer, loss_fn)
-        print(f'Epoch {epoch}: Loss: {loss:.4f}')
+        train_loss = train(model, train_data, optimizer, loss_fn)
+        auc_roc, precision, recall, f1 = evaluate(model, val_data)
+        print(f'Epoch {epoch}: Loss: {train_loss:.4f}, AUC-ROC: {auc_roc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}')
         scheduler.step()
 
-    except KeyError as e:
-        print(f"KeyError encountered: {e}")
-        # Optional: Add debugging or logging statements here
+    except Exception as e:
+        print(f"Exception encountered: {e}")
         break
+
 
 # Evaluate the model
 auc_roc, precision, recall, f1 = evaluate(model, test_data)
