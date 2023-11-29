@@ -68,7 +68,6 @@ class GCN(torch.nn.Module):
 # Function to train the model
 def train(model, data, optimizer, loss_fn):
     model.train()
-    optimizer.zero_grad()
 
     pos_edge_index = data.edge_index
     neg_edge_index = negative_sampling(edge_index=pos_edge_index, num_nodes=data.x.size(0))
@@ -101,8 +100,8 @@ def evaluate(model, data):
     probs = np.concatenate([pos_probs, neg_probs])
     labels = np.concatenate([np.ones(pos_probs.shape[0]), np.zeros(neg_probs.shape[0])])
 
-    auc_roc = roc_auc_score(labels, probs)
     preds = (probs > 0.5).astype(int)
+    auc_roc = roc_auc_score(labels, preds, average='binary')
     precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
     
     total_auc_roc += auc_roc
@@ -128,7 +127,12 @@ dropout = 0.5
 # Initialize the model
 model = GCN(input_dim, hidden_dim, num_groups, num_layers, dropout)
 loss_fn = torch.nn.BCEWithLogitsLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+from torch.optim.lr_scheduler import StepLR
+
+optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+
+scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
 
 print('GCN initialized')
 
@@ -146,8 +150,11 @@ print(loss)
 # Training loop with error handling
 for epoch in range(num_epochs):
     try:
+        optimizer.zero_grad()
         loss = train(model, train_data, optimizer, loss_fn)
         print(f'Epoch {epoch}: Loss: {loss:.4f}')
+        scheduler.step()
+
     except KeyError as e:
         print(f"KeyError encountered: {e}")
         # Optional: Add debugging or logging statements here
