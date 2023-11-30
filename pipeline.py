@@ -50,7 +50,7 @@ class GCN(torch.nn.Module):
         for i in range(1, len(self.convs) - 1):  # Adjusted loop
             x_hat = self.bns[i](x_hat)  # Apply batch normalization
             x_hat = F.relu(x_hat)  # Apply ReLU
-            x_hat = F.dropout(x_hat, self.dropout, training=self.training)  # Apply dropout
+            # x_hat = F.dropout(x_hat, self.dropout, training=self.training)  # Apply dropout
             x_hat = self.convs[i](x_hat, edge_index)  # Apply next convolutional layer
         return x_hat  # Return the transformed features
 
@@ -107,7 +107,6 @@ def evaluate(model, data):
     
     return auc_roc, precision, recall, f1
 
-
 input_dim = graph.x.shape[1]
 print(f'input_dim : {input_dim}')
 hidden_dim = 64
@@ -139,15 +138,15 @@ num_epochs = 100
 model = model.to(device)
 loss_fn = loss_fn.to(device)
 
-loss = train(model, train_data, optimizer, loss_fn)
 
-print(loss)
-
-# Training loop with error handling
+# Training loop with error handling and metric logging
+train_losses, val_metrics = [], []
 for epoch in range(num_epochs):
     try:
         train_loss = train(model, train_data, optimizer, loss_fn)
         auc_roc, precision, recall, f1 = evaluate(model, val_data)
+        train_losses.append(train_loss)
+        val_metrics.append((auc_roc, precision, recall, f1))
         print(f'Epoch {epoch}: Loss: {train_loss:.4f}, AUC-ROC: {auc_roc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}')
         scheduler.step()
 
@@ -155,14 +154,31 @@ for epoch in range(num_epochs):
         print(f"Exception encountered: {e}")
         break
 
+# Writing training loss and validation metrics to a file
+with open("training_validation_metrics.txt", "w") as file:
+    file.write("Epoch, Training Loss, AUC-ROC, Precision, Recall, F1-Score\n")
+    for i, epoch in enumerate(num_epochs):
+        train_loss = train_losses[i]
+        auc_roc, precision, recall, f1 = val_metrics[i]
+        file.write(f"{epoch}, {train_loss:.4f}, {auc_roc:.4f}, {precision:.4f}, {recall:.4f}, {f1:.4f}\n")
 
-# Evaluate the model
-auc_roc, precision, recall, f1 = evaluate(model, test_data)
-print(f"AUC-ROC: {auc_roc:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-Score: {f1:.4f}")
+# Plot training loss and validation metrics
+epochs = range(1, len(train_losses) + 1)
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(epochs, train_losses, label='Training Loss')
+plt.title('Training Loss Over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
 
-# Writing metrics to a file
-with open("evaluation_metrics.txt", "w") as file:
-    file.write(f"AUC-ROC: {auc_roc:.4f}\n")
-    file.write(f"Precision: {precision:.4f}\n")
-    file.write(f"Recall: {recall:.4f}\n")
-    file.write(f"F1-Score: {f1:.4f}\n")
+plt.subplot(1, 2, 2)
+val_metrics = np.array(val_metrics)
+metrics_labels = ['AUC-ROC', 'Precision', 'Recall', 'F1-Score']
+for i, label in enumerate(metrics_labels):
+    plt.plot(epochs, val_metrics[:, i], label=label)
+plt.title('Validation Metrics Over Epochs')
+plt.xlabel('Epoch')
+plt.ylabel('Metric')
+plt.legend()
+plt.show()
