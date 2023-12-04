@@ -125,13 +125,13 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 
 from torch.optim.lr_scheduler import StepLR
 
-optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.05)
 
 scheduler = StepLR(optimizer, step_size=10, gamma=0.5)
 
 print('GCN initialized')
 
-num_epochs = 100
+num_epochs = 1000
 
 # train on GPU if available
 
