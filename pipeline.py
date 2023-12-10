@@ -11,14 +11,23 @@ from torch_geometric.utils import negative_sampling
 from sklearn.metrics import roc_auc_score, precision_recall_fscore_support, confusion_matrix
 import seaborn as sns
 import matplotlib.pyplot as plt
+import umap
 
 # use cuda
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 pyg_graph = torch.load('pyg_graph_with_features.pt')
 
+x = pyg_graph.x
+
+#use umap to reduce dimension
+reducer = umap.UMAP(n_components=5)
+embedding = reducer.fit_transform(x.numpy())
+
+
+
 # only keep edge_intex, x, and num_nodes
-graph = Data(x=pyg_graph.x, edge_index=pyg_graph.edge_index, num_nodes=pyg_graph.num_nodes)
+graph = Data(x=embedding, edge_index=pyg_graph.edge_index, num_nodes=pyg_graph.num_nodes)
 
 transform = RandomLinkSplit(is_undirected=True)
 train_data, val_data, test_data = transform(graph)
