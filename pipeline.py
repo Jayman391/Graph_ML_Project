@@ -24,8 +24,6 @@ x = pyg_graph.x
 reducer = umap.UMAP(n_components=5)
 embedding = reducer.fit_transform(x.numpy())
 
-
-
 # only keep edge_intex, x, and num_nodes
 graph = Data(x=embedding, edge_index=pyg_graph.edge_index, num_nodes=pyg_graph.num_nodes)
 
