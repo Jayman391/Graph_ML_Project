@@ -160,32 +160,3 @@ for epoch in range(num_epochs):
     except Exception as e:
         print(f"Exception encountered: {e}")
         break
-
-# Writing training loss and validation metrics to a file
-with open("training_validation_metrics.txt", "w") as file:
-    file.write("Epoch, Training Loss, AUC-ROC, Precision, Recall, F1-Score\n")
-    for i, epoch in enumerate(num_epochs):
-        train_loss = train_losses[i]
-        auc_roc, precision, recall, f1 = val_metrics[i]
-        file.write(f"{epoch}, {train_loss:.4f}, {auc_roc:.4f}, {precision:.4f}, {recall:.4f}, {f1:.4f}\n")
-
-# Plot training loss and validation metrics
-epochs = range(1, len(train_losses) + 1)
-plt.figure(figsize=(12, 5))
-plt.subplot(1, 2, 1)
-plt.plot(epochs, train_losses, label='Training Loss')
-plt.title('Training Loss Over Epochs')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.legend()
-
-plt.subplot(1, 2, 2)
-val_metrics = np.array(val_metrics)
-metrics_labels = ['AUC-ROC', 'Precision', 'Recall', 'F1-Score']
-for i, label in enumerate(metrics_labels):
-    plt.plot(epochs, val_metrics[:, i], label=label)
-plt.title('Validation Metrics Over Epochs')
-plt.xlabel('Epoch')
-plt.ylabel('Metric')
-plt.legend()
-plt.show()
